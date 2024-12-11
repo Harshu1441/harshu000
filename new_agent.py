@@ -13,6 +13,14 @@ import socket
 previous_bytes_sent = 0
 previous_bytes_recv = 0
 
+
+
+def get_encrypted_mac():
+    mac = hex(uuid.getnode())[2:].upper()
+    mac_address = ':'.join(mac[i:i + 2] for i in range(0, len(mac), 2))
+    encrypted_mac = hashlib.sha256(mac_address.encode()).hexdigest()
+    return encrypted_mac
+
 # Function to find the full path of an application based on its name
 def find_application_path(app_name):
     if platform.system() == 'Windows':
@@ -367,11 +375,6 @@ def get_public_ip():
 agent_ip = get_public_ip()
 
 
-def get_encrypted_mac():
-    mac = hex(uuid.getnode())[2:].upper()
-    mac_address = ':'.join(mac[i:i + 2] for i in range(0, len(mac), 2))
-    encrypted_mac = hashlib.sha256(mac_address.encode()).hexdigest()
-    return encrypted_mac
 
 
 

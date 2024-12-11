@@ -8,15 +8,12 @@ import psutil
 from datetime import datetime
 import re
 import socket
-import sys
+
 
 previous_bytes_sent = 0
 previous_bytes_recv = 0
 
 # Function to find the full path of an application based on its name
-
-
-
 def find_application_path(app_name):
     if platform.system() == 'Windows':
         possible_dirs = [
@@ -50,8 +47,6 @@ def resolve_domain(domain):
     except subprocess.CalledProcessError as e:
         print(f"Error resolving domain '{domain}': {e}")
     return None
-
-    
 
 # Function to block domains by modifying the hosts file (Windows-specific)
 def block_domain_windows(domain):
@@ -191,11 +186,6 @@ def send_logs_to_server(server_url, logs):
         print(f"Error sending logs: {e}")
 
 # Register agent with the server
-
-
-
-
-
 def register_agent(server_url, agent_name, agent_ip):
     try:
         response = requests.post(server_url + '/api/register', json={'name': agent_name, 'ip': agent_ip})
@@ -205,32 +195,6 @@ def register_agent(server_url, agent_name, agent_ip):
             print(f"Failed to register agent: {response.status_code}")
     except Exception as e:
         print(f"Error registering agent: {e}")
-
-
-import threading
-
-def send_heartbeat(server_url, agent_ip):
-    """
-    Sends a periodic heartbeat to the server to update the agent's online status.
-    """
-    while True:
-        try:
-            response = requests.post(
-                server_url + '/api/agents/heartbeat',
-                json={'ip': agent_ip}
-            )
-            if response.status_code == 200:
-                print("Heartbeat sent successfully.")
-            else:
-                print(f"Failed to send heartbeat: {response.status_code}")
-        except Exception as e:
-            print(f"Error sending heartbeat: {e}")
-        time.sleep(30)  # Send heartbeat every 30 seconds
-
-# Start the heartbeat in a separate thread
-
-
-
 
 
 
@@ -273,7 +237,53 @@ def send_open_ports_list(server_url, agent_ip):
         print(f"Error sending open ports list: {e}")
 
 
+'''
+def main():
+    server_url = 'http://20.51.249.42:80'  # Replace with your Flask server IP
+    agent_name = platform.node()  # Use the PC name as the agent name
+    agent_ip = requests.get('https://api.ipify.org').text  # Get the public IP address
 
+    # Register the agent with the server
+    register_agent(server_url, agent_name, agent_ip)
+
+    while True:
+        # Fetch and apply firewall rules
+        rules = fetch_firewall_rules(server_url)
+        if rules:
+            apply_firewall_rules(rules)
+
+        # Log and send network activity
+        logs = log_network_activity()
+        send_logs_to_server(server_url, logs)
+
+        time.sleep(10)
+
+if __name__ == '__main__':
+    main()''' #1
+
+'''def main():
+    server_url = 'http://20.51.249.42:80'
+    #server_url = 'http://localhost:80' # Replace with your Flask server IP
+    agent_name = platform.node()  # Use the PC name as the agent name
+    agent_ip = requests.get('https://api.ipify.org').text  # Get the public IP address
+
+    # Register the agent with the server
+    register_agent(server_url, agent_name, agent_ip)
+
+    while True:
+        # Send open ports count to the server periodically
+        rules = fetch_firewall_rules(server_url)
+        if rules:
+            apply_firewall_rules(rules)
+        
+        logs = log_network_activity()
+        send_logs_to_server(server_url, logs)
+        send_open_ports_list(server_url, agent_ip)
+        time.sleep(10)
+
+if __name__ == '__main__':
+    main()
+'''#2
 # Function to get current bandwidth usage
 def get_bandwidth_usage():
     global previous_bytes_sent, previous_bytes_recv
@@ -321,137 +331,32 @@ def check_bandwidth_and_send_alert(server_url, threshold=5):
             print(f"Error sending alert: {e}")
 
 
-def is_agent_active(server_url, agent_ip, local_ip):
-    try:
-        response = requests.get(server_url + '/api/agents')
-        if response.status_code == 200:
-            agents = response.json()
-            print("Agents from server:", agents)  # Debug: Print the agents list
-            for agent in agents:
-                if agent.get('ip') == agent_ip or agent.get('local_ip') == local_ip:
-                    return True  # Agent is still active
-        return False  # Agent is not active
-    except Exception as e:
-        print(f"Error checking agent status: {e}")
-        return True  # Fail-safe to prevent premature exit
-
 
 import subprocess
-import requests
 
-
-# Maintain a global set to store previously sent URLs
-sent_urls = set()
-
-
-def fetch_dns_cache_windows():
-    """
-    Fetch DNS cache on Windows.
-    :return: List of DNS cache entries with details.
-    """
-    dns_cache = []
+def get_public_ip():
     try:
-        result = subprocess.run(
-            ["ipconfig", "/displaydns"],
-            capture_output=True,
-            text=True,
-            shell=True
-        )
-
-        if result.returncode == 0:
-            output = result.stdout
-            lines = output.splitlines()
-
-            record = {}
-            for line in lines:
-                line = line.strip()
-
-                if line.startswith("Record Name"):
-                    if record:
-                        dns_cache.append(record)
-                        record = {}
-                    record["URL"] = line.split(":")[1].strip()
-
-                elif line.startswith("A (Host) Record"):
-                    record["IPv4 Address"] = line.split(":")[1].strip()
-
-                elif line.startswith("AAAA Record"):
-                    record["IPv6 Address"] = line.split(":")[1].strip()
-
-            if record:
-                dns_cache.append(record)
-
-        return dns_cache
-
+        result = subprocess.check_output(['curl', '-s', 'https://ifconfig.me']).decode('utf-8').strip()
+        return result
     except Exception as e:
-        print(f"Error fetching DNS cache: {e}")
-        return []
+        print(f"Error fetching public IP: {e}")
+        return None
 
-
-def filter_new_entries(dns_cache):
-    """
-    Filter DNS cache to only include new entries.
-    :param dns_cache: List of DNS cache entries.
-    :return: Filtered list of new DNS entries.
-    """
-    global sent_urls
-    new_entries = []
-
-    for entry in dns_cache:
-        url = entry.get("URL")
-        if url and url not in sent_urls:
-            new_entries.append(entry)
-            sent_urls.add(url)
-
-    return new_entries
-
-
-def send_dns_history_to_server(server_url, dns_cache):
-    """
-    Send DNS history to the server.
-    """
-    try:
-        new_entries = filter_new_entries(dns_cache)
-        if not new_entries:
-            print("No new DNS entries to send.")
-            return
-
-        response = requests.post(f"{server_url}/api/dns_history", json=new_entries)
-        if response.status_code == 200:
-            print("DNS history sent successfully.")
-        else:
-            print(f"Failed to send DNS history: {response.text}")
-    except Exception as e:
-        print(f"Error sending DNS history: {e}")
+agent_ip = get_public_ip()
 
 
 
-
-
-
-
-
+# Main function to run the agent
 def main():
-    server_url = 'http://13.201.54.125:5500'  # Replace with your Flask server URL
+    server_url = 'http://13.201.54.125:5500' 
+    #server_url = 'http://localhost:80'# Replace with your server URL
     agent_name = platform.node()  # Use the PC name as the agent name
-    agent_ip = requests.get('https://api.ipify.org').text.strip()  # Get the public IP address
-    local_ip = socket.gethostbyname(socket.gethostname())  # Get local IP
+      # Get the public IP address
 
     # Register the agent with the server
     register_agent(server_url, agent_name, agent_ip)
 
-    heartbeat_thread = threading.Thread(target=send_heartbeat, args=(server_url, agent_ip))
-
-    heartbeat_thread.daemon = True
-
-    heartbeat_thread.start()
-
     while True:
-        # Check if the agent is still active
-        if not is_agent_active(server_url, agent_ip, local_ip):
-            print(f"Agent '{agent_name}' with IP '{agent_ip}' has been deleted. Stopping execution.")
-            sys.exit(0)  # Exit the agent
-
         # Check bandwidth usage and send alert if necessary
         check_bandwidth_and_send_alert(server_url)
 
@@ -460,21 +365,10 @@ def main():
         if rules:
             apply_firewall_rules(rules)
 
-        # Log and send network activity
         logs = log_network_activity()
         send_logs_to_server(server_url, logs)
-
-        # Send open ports to the server
         send_open_ports_list(server_url, agent_ip)
-
-        dns_cache = fetch_dns_cache_windows()
-        if dns_cache:
-            send_dns_history_to_server(server_url, dns_cache)
-
-        time.sleep(10)  # Adjust the sleep interval as needed
-
-
-
+        time.sleep(10)  # Adjust the sleep time as needed
 
 if __name__ == "__main__":
     main()

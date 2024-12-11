@@ -394,6 +394,99 @@ def fetch_firewall_rules(server_url, encrypted_mac):
     return []
 
 
+import subprocess
+import requests
+
+
+# Maintain a global set to store previously sent URLs
+sent_urls = set()
+
+
+def fetch_dns_cache_windows():
+    """
+    Fetch DNS cache on Windows.
+    :return: List of DNS cache entries with details.
+    """
+    dns_cache = []
+    try:
+        result = subprocess.run(
+            ["ipconfig", "/displaydns"],
+            capture_output=True,
+            text=True,
+            shell=True
+        )
+
+        if result.returncode == 0:
+            output = result.stdout
+            lines = output.splitlines()
+
+            record = {}
+            for line in lines:
+                line = line.strip()
+
+                if line.startswith("Record Name"):
+                    if record:
+                        dns_cache.append(record)
+                        record = {}
+                    record["URL"] = line.split(":")[1].strip()
+
+                elif line.startswith("A (Host) Record"):
+                    record["IPv4 Address"] = line.split(":")[1].strip()
+
+                elif line.startswith("AAAA Record"):
+                    record["IPv6 Address"] = line.split(":")[1].strip()
+
+            if record:
+                dns_cache.append(record)
+
+        return dns_cache
+
+    except Exception as e:
+        print(f"Error fetching DNS cache: {e}")
+        return []
+
+
+def filter_new_entries(dns_cache):
+    """
+    Filter DNS cache to only include new entries.
+    :param dns_cache: List of DNS cache entries.
+    :return: Filtered list of new DNS entries.
+    """
+    global sent_urls
+    new_entries = []
+
+    for entry in dns_cache:
+        url = entry.get("URL")
+        if url and url not in sent_urls:
+            new_entries.append(entry)
+            sent_urls.add(url)
+
+    return new_entries
+
+
+
+def send_dns_history_to_server(server_url, dns_cache):
+    """
+    Send DNS history to the server.
+    """
+    try:
+        new_entries = filter_new_entries(dns_cache)
+        if not new_entries:
+            print("No new DNS entries to send.")
+            return
+
+        response = requests.post(f"{server_url}/api/dns_history", json=new_entries)
+        if response.status_code == 200:
+            print("DNS history sent successfully.")
+        else:
+            print(f"Failed to send DNS history: {response.text}")
+    except Exception as e:
+        print(f"Error sending DNS history: {e}")
+
+
+
+
+
 # Main function to run the agent
 def main():
     server_url = 'http://13.201.54.125:5500' 
@@ -413,6 +506,10 @@ def main():
         rules = fetch_firewall_rules(server_url, encrypted_mac)
         if rules:
             apply_firewall_rules(rules)
+
+        dns_cache = fetch_dns_cache_windows()
+        if dns_cache:
+            send_dns_history_to_server(server_url, dns_cache)
 
         logs = log_network_activity()
         send_logs_to_server(server_url, logs)

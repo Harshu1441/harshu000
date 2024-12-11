@@ -7,17 +7,13 @@ import platform
 import psutil
 from datetime import datetime
 import re
-import socket
 import uuid
 import hashlib
 
-previous_bytes_sent = 0
-previous_bytes_recv = 0
-
-# Function to get MAC address
+# Function to get a unique machine ID (hashed MAC address)
 def get_machine_id():
     mac = ':'.join(re.findall('..', '%012x' % uuid.getnode()))
-    return hashlib.sha256(mac.encode()).hexdigest()  # Hash the MAC for security
+    return hashlib.sha256(mac.encode()).hexdigest()
 
 # Function to resolve domain to its IP address
 def resolve_domain(domain):
@@ -121,16 +117,29 @@ def register_agent(server_url, agent_name, agent_ip):
         })
         if response.status_code == 201:
             print(f"Registered agent '{agent_name}' successfully.")
+        elif response.status_code == 200:
+            print(f"Agent '{agent_name}' is already registered. Last seen updated.")
         else:
-            print(f"Failed to register agent: {response.status_code}")
+            print(f"Unexpected response: {response.status_code}")
     except Exception as e:
         print(f"Error registering agent: {e}")
 
+
 # Main function
+
+import socket
+
+def get_public_ip():
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+
+agent_ip = get_public_ip()
+
+
 def main():
     server_url = 'http://13.201.54.125:5500'
-    agent_name = platform.node()
-    agent_ip = requests.get('https://api.ipify.org').text  # Get public IP
+    agent_name = platform.node() # Get public IP
     machine_id = get_machine_id()
 
     # Register the agent

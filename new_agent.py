@@ -45,6 +45,96 @@ def find_application_path(app_name):
 
     return None
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def log_application_activity():
+    """
+    Logs the activity of all running applications (processes).
+    """
+    print("Logging application activity...")
+    logs = []
+    for proc in psutil.process_iter(attrs=['pid', 'name', 'username', 'status', 'cpu_percent', 'memory_info']):
+        try:
+            process_info = proc.info
+            logs.append({
+                "time": datetime.now().isoformat(),
+                "name": process_info['name'],
+                "pid": process_info['pid'],
+                "user": process_info.get('username', 'N/A'),
+                "status": process_info['status'],
+                "cpu": process_info['cpu_percent'],
+                "memory": process_info['memory_info'].rss / 1024 ** 2  # Memory in MB
+            })
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+    return logs
+
+
+def log_service_activity():
+    """
+    Logs the activity of all system services.
+    """
+    print("Logging service activity...")
+    logs = []
+    try:
+        if platform.system() == "Windows":
+            for service in psutil.win_service_iter():
+                try:
+                    logs.append({
+                        "time": datetime.now().isoformat(),
+                        "name": service.name(),
+                        "display_name": service.display_name(),
+                        "status": service.status()
+                    })
+                except Exception as e:
+                    print(f"Error logging service: {e}")
+        elif platform.system() == "Linux":
+            result = subprocess.run(['systemctl', 'list-units', '--type=service', '--state=running'],
+                                    capture_output=True, text=True)
+            if result.returncode == 0:
+                lines = result.stdout.splitlines()[1:]  # Skip the header
+                for line in lines:
+                    columns = line.split(None, 4)  # Split into up to 5 parts
+                    if len(columns) >= 2:
+                        logs.append({
+                            "time": datetime.now().isoformat(),
+                            "name": columns[0],
+                            "status": "running"
+                        })
+    except Exception as e:
+        print(f"Error logging service activity: {e}")
+    return logs
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Function to resolve domain to its IP address
 def resolve_domain(domain):
     try:
@@ -195,6 +285,7 @@ def send_logs_to_server(server_url, logs):
             print(f"Failed to send logs: {response.status_code}")
     except Exception as e:
         print(f"Error sending logs: {e}")
+
 
 
 
@@ -375,6 +466,30 @@ def get_public_ip():
 agent_ip = get_public_ip()
 
 
+def post_data_to_server(endpoint, logs, agent_ip):
+    """
+    Sends data to the specified server endpoint with agent information.
+    :param endpoint: The server endpoint to which data should be sent.
+    :param logs: The logs data to send (list of dictionaries).
+    :param agent_ip: The agent's IP address.
+    """
+    try:
+        # Add agent IP to each log
+        for log in logs:
+            log['agent_ip'] = agent_ip
+
+        # Send data to the server
+        response = requests.post(endpoint, json=logs)
+        if response.status_code == 200:
+            print(f"Data sent successfully to {endpoint}.")
+        else:
+            print(f"Failed to send data: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"Error sending data to {endpoint}: {e}")
+
+
+
+
 
 
 
@@ -464,6 +579,42 @@ def filter_new_entries(dns_cache):
     return new_entries
 
 
+def log_service_activity():
+    """
+    Logs the activity of all system services.
+    """
+    print("Logging service activity...")
+    logs = []
+    try:
+        if platform.system() == "Windows":
+            for service in psutil.win_service_iter():
+                try:
+                    logs.append({
+                        "time": datetime.now().isoformat(),
+                        "name": service.name(),
+                        "display_name": service.display_name(),
+                        "status": service.status()
+                    })
+                except Exception as e:
+                    print(f"Error logging service: {e}")
+        elif platform.system() == "Linux":
+            result = subprocess.run(['systemctl', 'list-units', '--type=service', '--state=running'],
+                                    capture_output=True, text=True)
+            if result.returncode == 0:
+                lines = result.stdout.splitlines()[1:]  # Skip the header
+                for line in lines:
+                    columns = line.split(None, 4)  # Split into up to 5 parts
+                    if len(columns) >= 2:
+                        logs.append({
+                            "time": datetime.now().isoformat(),
+                            "name": columns[0],
+                            "status": "running"
+                        })
+    except Exception as e:
+        print(f"Error logging service activity: {e}")
+    return logs
+
+
 
 def send_dns_history_to_server(server_url, dns_cache):
     """
@@ -487,6 +638,7 @@ def send_dns_history_to_server(server_url, dns_cache):
 
 
 
+
 # Main function to run the agent
 def main():
     server_url = 'http://13.201.54.125:5500' 
@@ -500,6 +652,17 @@ def main():
 
     while True:
         # Check bandwidth usage and send alert if necessary
+
+        app_logs = log_application_activity()
+        service_logs = log_service_activity()
+
+
+        post_data_to_server(f"{server_url}/api/application_logs", app_logs, agent_ip)
+        post_data_to_server(f"{server_url}/api/service_logs", service_logs, agent_ip)
+
+
+        # Log and send service activity
+
         check_bandwidth_and_send_alert(server_url)
 
         # Fetch and apply firewall rules

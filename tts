@@ -1,3 +1,268 @@
+# # # client.py
+# # import psutil
+# # import requests
+# # import threading
+# # import time
+# # import pydivert
+# # import uuid
+
+
+
+
+# # def get_mac_address():
+# #     try:
+# #         # Retrieve MAC address using uuid.getnode
+# #         mac_address = ':'.join(['{:02x}'.format((uuid.getnode() >> elements) & 0xff)
+# #                                 for elements in range(0, 2 * 6, 8)][::-1])
+# #         return mac_address
+# #     except Exception as e:
+# #         return f"Error: {str(e)}"
+
+
+
+
+# # AGENT_ID = get_mac_address() # Unique identifier for this agent
+# # SERVER_URL = "http://localhost:5000"
+
+# # # Store local blocking rules fetched from the server
+# # local_rules = {}
+
+# # def register_with_server():
+# #     """
+# #     Register this agent with the central server.
+# #     """
+# #     try:
+# #         response = requests.post(f"{SERVER_URL}/register", json={"agent_id": AGENT_ID})
+# #         print(response.json())
+# #     except requests.exceptions.RequestException as e:
+# #         print(f"Error registering with server: {e}")
+
+# # def fetch_rules():
+# #     """
+# #     Fetch blocking rules from the server.
+# #     """
+# #     global local_rules
+# #     while True:
+# #         try:
+# #             response = requests.get(f"{SERVER_URL}/rules/{AGENT_ID}")
+# #             if response.status_code == 200:
+# #                 local_rules = response.json()
+# #                 print(f"Fetched rules: {local_rules}")
+# #             else:
+# #                 print(f"Failed to fetch rules: {response.json()}")
+# #         except requests.exceptions.RequestException as e:
+# #             print(f"Error fetching rules: {e}")
+# #         time.sleep(10)  # Fetch rules every 10 seconds
+
+# # # client.py (normalize process name)
+# # def get_process_by_port(port):
+# #     """
+# #     Get the normalized process name associated with the given port.
+# #     """
+# #     try:
+# #         for conn in psutil.net_connections(kind="tcp"):
+# #             if conn.laddr.port == port:
+# #                 try:
+# #                     process = psutil.Process(conn.pid)
+# #                     return normalize_process_name(process.name())
+# #                 except psutil.NoSuchProcess:
+# #                     return None
+# #     except Exception as e:
+# #         print(f"Error fetching process by port: {e}")
+# #     return None
+
+# # def normalize_process_name(process_name):
+# #     """
+# #     Normalize process names for browsers.
+# #     """
+# #     process_name = process_name.lower()
+# #     if "firefox" in process_name:
+# #         return "firefox.exe"
+# #     if "chrome" in process_name:
+# #         return "chrome.exe"
+# #     if "edge" in process_name or "msedge" in process_name:
+# #         return "msedge.exe"
+# #     return process_name  # Fallback to the original name
+
+
+# # def block_traffic():
+# #     """
+# #     Block traffic based on the fetched rules.
+# #     """
+# #     print("Starting traffic interception...")
+# #     with pydivert.WinDivert("(tcp.DstPort == 80 or tcp.DstPort == 443) and tcp.PayloadLength > 0") as w:
+# #         for packet in w:
+# #             try:
+# #                 # Get the process name associated with the packet's source port
+# #                 process_name = get_process_by_port(packet.src_port)
+# #                 if not process_name:
+# #                     w.send(packet)  # Forward if the process is unknown
+# #                     continue
+
+# #                 # Check if there are rules for the process name (browser)
+# #                 if process_name in local_rules:
+# #                     # Check if packet payload matches any domain for the browser
+# #                     for domain in local_rules[process_name]:
+# #                         if domain.encode() in packet.payload:
+# #                             print(f"Blocked traffic to {domain} for {process_name}.")
+# #                             break  # Drop the packet
+# #                     else:
+# #                         w.send(packet)  # Forward non-blocked packets
+# #                 else:
+# #                     w.send(packet)  # Forward packets for browsers without rules
+
+# #             except Exception as e:
+# #                 print(f"Error: {e}")
+# #                 try:
+# #                     w.send(packet)  # Ensure packets are forwarded on error
+# #                 except Exception as send_error:
+# #                     print(f"Failed to send packet: {send_error}")
+
+
+# # if __name__ == "__main__":
+# #     try:
+# #         # Register the agent with the central server
+# #         register_with_server()
+# #         get_mac_address()
+
+# #         # Start fetching rules in a separate thread
+# #         threading.Thread(target=fetch_rules, daemon=True).start()
+
+# #         # Start blocking traffic
+# #         block_traffic()
+# #     except KeyboardInterrupt:
+# #         print("Agent stopped.")
+# #     except Exception as e:
+# #         print(f"Unhandled error: {e}")
+
+
+
+
+# import psutil
+# import requests
+# import threading
+# import time
+# import pydivert
+# import uuid
+
+# def get_mac_address():
+#     """
+#     Generate a unique identifier for the agent using the MAC address.
+#     """
+#     try:
+#         mac_address = ':'.join(['{:02x}'.format((uuid.getnode() >> elements) & 0xff)
+#                                 for elements in range(0, 2 * 6, 8)][::-1])
+#         return mac_address
+#     except Exception as e:
+#         return f"Error: {str(e)}"
+
+# AGENT_ID = get_mac_address()  # Unique identifier for this agent
+# SERVER_URL = "http://13.201.54.125:6600"
+
+# # Store local blocking rules fetched from the server
+# local_rules = {}
+
+# def register_with_server():
+#     """
+#     Register this agent with the central server.
+#     """
+#     try:
+#         response = requests.post(f"{SERVER_URL}/register", json={"agent_id": AGENT_ID})
+#         print(response.json())
+#     except requests.exceptions.RequestException as e:
+#         print(f"Error registering with server: {e}")
+
+# def fetch_rules():
+#     """
+#     Fetch blocking rules from the server.
+#     """
+#     global local_rules
+#     while True:
+#         try:
+#             response = requests.get(f"{SERVER_URL}/rules/{AGENT_ID}")
+#             if response.status_code == 200:
+#                 local_rules = response.json()
+#                 print(f"Fetched rules: {local_rules}")
+#             else:
+#                 print(f"Failed to fetch rules: {response.json()}")
+#         except requests.exceptions.RequestException as e:
+#             print(f"Error fetching rules: {e}")
+#         time.sleep(10)  # Fetch rules every 10 seconds
+
+# def get_process_by_port(port):
+#     """
+#     Get the normalized process name associated with the given port.
+#     """
+#     try:
+#         for conn in psutil.net_connections(kind="tcp"):
+#             if conn.laddr.port == port:
+#                 try:
+#                     process = psutil.Process(conn.pid)
+#                     return normalize_process_name(process.name())
+#                 except psutil.NoSuchProcess:
+#                     return None
+#     except Exception as e:
+#         print(f"Error fetching process by port: {e}")
+#     return None
+
+# def normalize_process_name(process_name):
+#     """
+#     Normalize process names for browsers.
+#     """
+#     process_name = process_name.lower()
+#     if "firefox" in process_name:
+#         return "firefox.exe"
+#     if "chrome" in process_name:
+#         return "chrome.exe"
+#     if "edge" in process_name or "msedge" in process_name:
+#         return "msedge.exe"
+#     return process_name  # Fallback to the original name
+
+# def block_traffic():
+#     """
+#     Block traffic based on the fetched rules.
+#     """
+#     print("Starting traffic interception...")
+#     with pydivert.WinDivert("(tcp.DstPort == 80 or tcp.DstPort == 443) and tcp.PayloadLength > 0") as w:
+#         for packet in w:
+#             try:
+#                 # Get the process name associated with the packet's source port
+#                 process_name = get_process_by_port(packet.src_port)
+#                 if not process_name:
+#                     w.send(packet)  # Forward if the process is unknown
+#                     continue
+
+#                 # Check if there are rules for the process name (browser)
+#                 for domain, browsers in local_rules.items():
+#                     if process_name in browsers:
+#                         if domain.encode() in packet.payload:
+#                             print(f"Blocked traffic to {domain} for {process_name}.")
+#                             break  # Drop the packet
+#                 else:
+#                     w.send(packet)  # Forward non-blocked packets
+
+#             except Exception as e:
+#                 print(f"Error: {e}")
+#                 try:
+#                     w.send(packet)  # Ensure packets are forwarded on error
+#                 except Exception as send_error:
+#                     print(f"Failed to send packet: {send_error}")
+
+# if __name__ == "__main__":
+#     try:
+#         # Register the agent with the central server
+#         register_with_server()
+
+#         # Start fetching rules in a separate thread
+#         threading.Thread(target=fetch_rules, daemon=True).start()
+
+#         # Start blocking traffic
+#         block_traffic()
+#     except KeyboardInterrupt:
+#         print("Agent stopped.")
+#     except Exception as e:
+#         print(f"Unhandled error: {e}")
+
 
 
 import os
@@ -23,7 +288,13 @@ def get_mac_address():
     except Exception as e:
         return f"Error: {str(e)}"
 
-AGENT_ID = get_mac_address()
+unique_id = uuid.uuid4()
+
+
+if IS_WINDOWS:
+	AGENT_ID = get_mac_address()
+else:
+	AGENT_ID = unique_id
 SERVER_URL = "http://13.201.54.125:6600"
 local_rules = {}  # Store local blocking rules fetched from the server
 
